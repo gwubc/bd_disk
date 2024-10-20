@@ -50,7 +50,7 @@ class BaiduDiskDownloader:
                 f.write(data)
                 # Update the progress bar
                 progress.update(len(data))
-
+        progress.close()
         return
 
     def run(self):
