@@ -54,8 +54,8 @@ class BaiduDiskDownloader:
         response = requests.get(url, stream=True, headers=headers)
         file_size = int(response.headers.get('content-length', 0))
         with (open(downloadPath, 'wb') as f,
-              tqdm(response.iter_content(1024), f'Downloading {downloadPath}', total=file_size, unit='B', unit_scale=True, unit_divisor=1024) as progress):
-            for data in progress:
+              tqdm(desc=f'Downloading {downloadPath}', total=file_size, unit='B', unit_scale=True, unit_divisor=1024) as progress):
+            for data in response.iter_content(1024):
                 f.write(data)
                 progress.update(len(data))
         return
