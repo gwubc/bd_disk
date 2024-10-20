@@ -1,19 +1,26 @@
 import requests
 import json
 from tqdm.auto import tqdm
+import concurrent.futures
 
 class BaiduDiskDownloader:
-    fileName: str
-    downloadPath: str
-    access_token: str
+    fileNames: list[str]
+    downloadPaths: list[str]
+    access_tokens: str
+    max_concurrent: int
 
-    def __init__(self, fileName: str, downloadPath: str, access_token: str):
-        self.fileName = fileName
-        self.downloadPath = downloadPath
+    def __init__(self, access_token: str, max_concurrent: int = 3):
         self.access_token = access_token
+        self.max_concurrent = max_concurrent
+        self.fileNames = []
+        self.downloadPaths = []
 
-    def getFileId(self):
-        url = f"http://pan.baidu.com/rest/2.0/xpan/file?dir=/&access_token={self.access_token}&web=1&recursion=1&page=1&num=2&method=search&key={self.fileName}"
+    def add_download_task(self, fileName: str, downloadPath: str):
+        self.fileNames.append(fileName)
+        self.downloadPaths.append(downloadPath)
+
+    def getFileId(self, fileName):
+        url = f"http://pan.baidu.com/rest/2.0/xpan/file?dir=/&access_token={self.access_token}&web=1&recursion=1&page=1&num=2&method=search&key={fileName}"
         headers = {'User-Agent': 'pan.baidu.com'}
         response = requests.get(url, headers=headers)
         responseData = json.loads(response.text.encode('utf8'))
@@ -37,23 +44,20 @@ class BaiduDiskDownloader:
         headers = {'User-Agent': 'pan.baidu.com'}
         response = requests.get(url, stream=True, headers=headers)
         file_size = int(response.headers.get('content-length', 0))
-
-        # Initialize progress bar with file size
-        progress = tqdm(response.iter_content(1024), f'Downloading {filename}', total=file_size, unit='B',
-                        unit_scale=True,
-                        unit_divisor=1024)
-
-        # Open the file for writing
-        with open(filename, 'wb') as f:
+        with (open(filename, 'wb') as f,
+              tqdm(response.iter_content(1024), f'Downloading {filename}', total=file_size, unit='B', unit_scale=True, unit_divisor=1024) as progress):
             for data in progress:
-                # Write data read from the URL to the file
                 f.write(data)
-                # Update the progress bar
                 progress.update(len(data))
-        progress.close()
         return
 
-    def run(self):
-        fid, _ = self.getFileId()
-        dlink = self.getDlink(fid)
-        self.download_file(dlink, self.downloadPath)
+    def run(self, fileName: str=None, downloadPath: str=None):
+        if fileName is not None and downloadPath is not None:
+            self.add_download_task(fileName, downloadPath)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_concurrent) as executor:
+            futures = []
+            for fileName, downloadPath in zip(self.fileNames, self.downloadPaths):
+                fid, _ = self.getFileId(fileName)
+                dlink = self.getDlink(fid)
+                futures.append(executor.submit(self.download_file, dlink, downloadPath))
