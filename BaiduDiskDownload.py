@@ -2,6 +2,7 @@ import requests
 import json
 from tqdm.auto import tqdm
 import concurrent.futures
+import os
 
 class BaiduDiskDownloader:
     fileNames: list[str]
@@ -20,13 +21,21 @@ class BaiduDiskDownloader:
         self.downloadPaths.append(downloadPath)
 
     def getFileId(self, fileName):
-        url = f"http://pan.baidu.com/rest/2.0/xpan/file?dir=/&access_token={self.access_token}&web=1&recursion=1&page=1&num=2&method=search&key={fileName}"
+        if os.path.isabs(fileName):
+            dir = os.path.dirname(fileName)
+            fileName = os.path.basename(fileName)
+        else:
+            dir = "/"
+        url = f"http://pan.baidu.com/rest/2.0/xpan/file?dir={dir}&access_token={self.access_token}&web=1&recursion=1&page=1&num=2&method=search&key={fileName}"
         headers = {'User-Agent': 'pan.baidu.com'}
         response = requests.get(url, headers=headers)
         responseData = json.loads(response.text.encode('utf8'))
         if len(responseData["list"]) != 1:
-            print("File not unique")
-            return
+            if len(responseData["list"]) == 0:
+                print("File not found")
+            else:
+                print("File not unique")
+            raise Exception("File not found or not unique")
         fid = responseData["list"][0]["fs_id"]
         server_filename = responseData["list"][0]["server_filename"]
         return fid, server_filename
@@ -40,12 +49,12 @@ class BaiduDiskDownloader:
         return f"{dlink}&access_token={self.access_token}"
 
 
-    def download_file(self, url, filename):
+    def download_file(self, url, downloadPath):
         headers = {'User-Agent': 'pan.baidu.com'}
         response = requests.get(url, stream=True, headers=headers)
         file_size = int(response.headers.get('content-length', 0))
-        with (open(filename, 'wb') as f,
-              tqdm(response.iter_content(1024), f'Downloading {filename}', total=file_size, unit='B', unit_scale=True, unit_divisor=1024) as progress):
+        with (open(downloadPath, 'wb') as f,
+              tqdm(response.iter_content(1024), f'Downloading {downloadPath}', total=file_size, unit='B', unit_scale=True, unit_divisor=1024) as progress):
             for data in progress:
                 f.write(data)
                 progress.update(len(data))
