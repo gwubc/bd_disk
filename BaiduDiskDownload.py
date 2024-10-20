@@ -1,6 +1,6 @@
 import requests
 import json
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 class BaiduDiskDownloader:
     fileName: str
